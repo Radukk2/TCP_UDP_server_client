@@ -1,6 +1,12 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#include <set>
+#include <string>
+#include <cstring>
+
+using namespace std;
+
 #define MAX_CONNECTIONS 32
 
 #define MSG_MAXSIZE 1024
@@ -16,6 +22,7 @@ struct client
     char client_id[MSG_MAXSIZE];
     struct sockaddr_in addr;
     int fd;
+    set<string> topics;
 };
 
 

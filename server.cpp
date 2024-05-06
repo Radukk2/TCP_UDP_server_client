@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <iostream>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,16 +11,35 @@
 #include <unistd.h>
 #include <string>
 #include <vector>
+#include <algorithm>
+#include <cstring>
 #include "helpers.hpp"
 #include "common.hpp"
 
 using namespace std;
 
+int receive_and_send(int connfd1, int connfd2, size_t len) {
+	int bytes_received;
+	char buffer[len];
+	bytes_received = recv_all(connfd1, buffer, len);
+	if (bytes_received == 0) {
+		return 0;
+	}
+	DIE(bytes_received < 0, "recv");
+	int rc = send_all(connfd2, buffer, len);
+	if (rc <= 0) {
+		perror("send_all");
+		return -1;
+	}
 
-void run_chat_multi_server(int listenfd) {
+	return bytes_received;
+}
+
+
+void run_chat_multi_server(int listenfd, int udpfd) {
 
 	struct pollfd poll_fds[MAX_CONNECTIONS];
-	int num_clients = 2;
+	int num_clients = 3;
 	int rc;
 	vector<struct client> clients;
 
@@ -30,6 +50,8 @@ void run_chat_multi_server(int listenfd) {
 	poll_fds[0].events = POLLIN;
 	poll_fds[1].fd = STDIN_FILENO;
     poll_fds[1].events = POLLIN;
+	poll_fds[2].fd = 2;
+	poll_fds[2].events = POLLIN;
 
 	while (1) {
 		rc = poll(poll_fds, num_clients, -1);
@@ -78,9 +100,38 @@ void run_chat_multi_server(int listenfd) {
 					printf("New client %s connected from 127.0.0.1:%d.\n",
 							new_client.client_id, ntohs(cli_addr.sin_port));
 					clients.push_back(new_client);
+				} else if (poll_fds[i].fd == udpfd) {
+					// int rc = recv_all(udpfd, &received_packet,
+					// 				  sizeof(received_packet));
+					// struct client new_client;
+					// struct sockaddr_in cli_addr;
+					// socklen_t cli_len = sizeof(cli_addr);
+					// int newsockfd =
+					// 	accept(udpfd, (struct sockaddr *)&cli_addr, &cli_len);
+					// for (int i = 0 ; i < )
+
 				} else {
 					int rc = recv_all(poll_fds[i].fd, &received_packet,
 									  sizeof(received_packet));
+					if (!strncmp("subscribe", received_packet.message, 9)) {
+						for (int j = 0 ; j < clients.size(); j++) {
+							if (clients[j].fd == poll_fds[i].fd) {
+								clients[j].topics.insert(string((const char *) received_packet.message + 9));
+								// for (const auto& topic : clients[j].topics) {
+								// 	cout<<topic<<" ";
+								// }
+								// cout<<"\n";
+								break;
+							}
+						}
+					}
+					if (!strncmp("unsubscribe", received_packet.message, 11)) {
+						for (int j = 0 ; j < clients.size(); j++) {
+							if (clients[j].fd == poll_fds[i].fd) {
+								clients[j].topics.erase(string((const char *) received_packet.message + 11));
+							}
+						}
+					}
 					DIE(rc < 0, "recv");
 
 					if (rc == 0) {
@@ -112,6 +163,7 @@ int main(int argc, char *argv[]) {
 	DIE(rc != 1, "Given port is invalid");
 	int listenfd = socket(AF_INET, SOCK_STREAM, 0);
 	DIE(listenfd < 0, "socket");
+	int udpfd = socket(AF_INET, SOCK_DGRAM, 0);
 	struct sockaddr_in serv_addr;
 	socklen_t socket_len = sizeof(struct sockaddr_in);
 	int enable = 1;
@@ -123,7 +175,8 @@ int main(int argc, char *argv[]) {
 	rc = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr.s_addr);
 	DIE(rc <= 0, "inet_pton");
 	rc = bind(listenfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	rc= bind(udpfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr));
 	DIE(rc < 0, "bind");
-	run_chat_multi_server(listenfd);
+	run_chat_multi_server(listenfd, udpfd);
 	return 0;
 }

@@ -13,23 +13,6 @@
 #include "helpers.hpp"
 #include "common.hpp"
 
-int receive_and_send(int connfd1, int connfd2, size_t len) {
-	int bytes_received;
-	char buffer[len];
-	bytes_received = recv_all(connfd1, buffer, len);
-	if (bytes_received == 0) {
-		return 0;
-	}
-	DIE(bytes_received < 0, "recv");
-	int rc = send_all(connfd2, buffer, len);
-	if (rc <= 0) {
-		perror("send_all");
-		return -1;
-	}
-
-	return bytes_received;
-}
-
 void run_client(int sockfd) {
 	char buf[MSG_MAXSIZE + 1];
 	memset(buf, 0, MSG_MAXSIZE + 1);
@@ -45,10 +28,16 @@ void run_client(int sockfd) {
 		poll(fds, 2, -1);
 		if ((fds[0].revents & POLLIN)) {
 			int rc = recv_all(sockfd, &recv_packet, sizeof(recv_packet));
+			if (rc == 0) {
+				close(sockfd);
+				return;
+			}
 			printf("%s", recv_packet.message);
 		}
 		if (fds[1].revents & POLLIN) {
-			if (fgets(buf, sizeof(buf), stdin) && !isspace(buf[0])) {
+				scanf("%s", buf);
+				strcpy(sent_packet.message, buf);
+				sent_packet.len = strlen(buf) + 1;
 				//exit
 				if (strncmp("exit", buf, 4) == 0) {
 					close(sockfd);
@@ -56,15 +45,17 @@ void run_client(int sockfd) {
 				}
 				//subscribe
 				if (strncmp(buf, "subscribe", 9) == 0) {
-					printf("Subscribed to topic %s", strtok(buf, "subscribe "));
+					char topic[100];
+					scanf("%s", topic);
+					printf("Subscribed to topic %s\n", topic);
+					strcat(sent_packet.message, topic);
 				}
 				if (strncmp(buf, "unsubscribe", 11) == 0) {
-					printf("Unsubscribed from topic %s", strtok(buf, "unsubscribe "));
+					char topic[100];
+					printf("Unsubscribed from topic %s\n", topic);
+					strcat(sent_packet.message, topic);
 				}
-				sent_packet.len = strlen(buf) + 1;
-				strcpy(sent_packet.message, buf);
 				send_all(sockfd, &sent_packet, sizeof(sent_packet));
-			}
 		}
 	}
 }
@@ -90,6 +81,8 @@ int main(int argc, char *argv[]) {
 	rc = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
 	rc = send(sockfd, argv[1], sizeof(argv[1]), 0);
 	DIE(rc < 0, "connect");
+	int flag = 1;
+	int result = setsockopt(sockfd, IPPROTO_TCP, 1, (char *)&flag, sizeof(int));
 	run_client(sockfd);
 	return 0;
 }
