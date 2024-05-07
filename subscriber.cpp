@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,8 +11,16 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <iomanip>
+#include <cmath>
 #include "helpers.hpp"
 #include "common.hpp"
+
+struct Packet {
+	char topic[50];
+	char type;
+	char content[1501];
+};
 
 void run_client(int sockfd) {
 	char buf[MSG_MAXSIZE + 1];
@@ -27,12 +36,48 @@ void run_client(int sockfd) {
 	while (1) {
 		poll(fds, 2, -1);
 		if ((fds[0].revents & POLLIN)) {
-			int rc = recv_all(sockfd, &recv_packet, sizeof(recv_packet));
+			struct Packet packet;
+			int rc = recv_all(sockfd, &packet, sizeof(packet));
 			if (rc == 0) {
 				close(sockfd);
 				return;
 			}
-			printf("%s", recv_packet.message);
+			cout<<packet.topic<<" - ";
+				switch (((int)packet.type)) {
+					case 0:
+						// cout<<packet.content<<"\n";
+						int32_t my_int, rez;
+						memcpy(&my_int, packet.content + sizeof(char), sizeof(uint32_t));
+						if ((uint8_t)packet.content[0] == 1)
+							rez = -1 * ntohl(my_int);
+						else 
+							rez = ntohl(my_int);
+						cout<<"INT - "<<rez<<"\n";
+						break;
+					case 1:
+						uint16_t my_short;
+						double res;
+						memcpy(&my_short, packet.content, sizeof(uint16_t));
+						res = (double)ntohs(my_short) / 100;
+						cout<<"SHORT_REAL - "<<fixed<<setprecision(2)<<res<<"\n";
+						break;
+					case 2:
+						int32_t my_float;
+						float fin;
+						memcpy(&my_float, packet.content + 1, sizeof(uint32_t));
+						if ((uint8_t)packet.content[0] == 1)
+							fin = (float)-1 * ntohl(my_float) / pow(10, (uint8_t)packet.content[5]);
+						else 
+							fin = (float)ntohl(my_float) / pow(10, (uint8_t)packet.content[5]);
+						cout<<"FLOAT - "<<fixed<<setprecision((uint8_t)packet.content[5])<<fin<<"\n";
+						break;
+					case 3:
+						cout<<"STRING - "<<packet.content<<"\n";
+						break;
+					default:
+						cout<<"Unrecognized type\n";
+						break;
+					}
 		}
 		if (fds[1].revents & POLLIN) {
 				scanf("%s", buf);
@@ -50,7 +95,7 @@ void run_client(int sockfd) {
 					printf("Subscribed to topic %s\n", topic);
 					strcat(sent_packet.message, topic);
 					sent_packet.len += strlen(topic);
-				}
+				}//unsubscribe
 				if (strncmp(buf, "unsubscribe", 11) == 0) {
 					char topic[100];
 					printf("Unsubscribed from topic %s\n", topic);

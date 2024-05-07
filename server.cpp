@@ -10,13 +10,22 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <string>
+#include <set>
 #include <vector>
+#include <cmath>
 #include <algorithm>
 #include <cstring>
+#include <regex>
 #include "helpers.hpp"
 #include "common.hpp"
 
 using namespace std;
+
+struct Packet {
+	char topic[50];
+	char type;
+	char content[1501];
+};
 
 int receive_and_send(int connfd1, int connfd2, size_t len) {
 	int bytes_received;
@@ -50,7 +59,7 @@ void run_chat_multi_server(int listenfd, int udpfd) {
 	poll_fds[0].events = POLLIN;
 	poll_fds[1].fd = STDIN_FILENO;
     poll_fds[1].events = POLLIN;
-	poll_fds[2].fd = 2;
+	poll_fds[2].fd = udpfd;
 	poll_fds[2].events = POLLIN;
 
 	while (1) {
@@ -107,21 +116,27 @@ void run_chat_multi_server(int listenfd, int udpfd) {
 							new_client.client_id, ntohs(cli_addr.sin_port));
 					clients.push_back(new_client);
 				} else if (poll_fds[i].fd == udpfd) {
-					// int rc = recv_all(udpfd, &received_packet,
-					// 				  sizeof(received_packet));
-					// struct client new_client;
-					// struct sockaddr_in cli_addr;
-					// socklen_t cli_len = sizeof(cli_addr);
-					// int newsockfd =
-					// 	accept(udpfd, (struct sockaddr *)&cli_addr, &cli_len);
-					// for (int i = 0 ; i < )
+					struct Packet packet;
+					struct sockaddr_in cli_addr;
+					socklen_t cli_len = sizeof(cli_addr);
+					int rc = recvfrom(udpfd, &packet, sizeof(struct Packet), 0, (struct sockaddr *)&cli_addr, &cli_len);
+					for (int j = 0; j < num_clients; j++) {
+						if (j > 2 )
+							for (int it = 0; it < clients.size(); it++) {
+								if (clients[it].fd == poll_fds[j].fd) {
+									auto top = clients[it].topics.find(packet.topic);
+									if (top != clients[it].topics.end())
+										send_all(poll_fds[j].fd, &packet, sizeof(packet));
+								}
+							}
+					}
 
 				} else {
 					int rc = recv_all(poll_fds[i].fd, &received_packet,
 									  sizeof(received_packet));
 					if (!strncmp("subscribe", received_packet.message, 9)) {
 						for (int j = 0 ; j < clients.size(); j++) {
-							if (clients[j].fd == poll_fds[i].fd) {
+							if (clients[j].fd == poll_fds[i].fd && clients[j].isOn) {
 								clients[j].topics.insert(string((const char *) received_packet.message + 9));
 								// for (const auto& topic : clients[j].topics) {
 								// 	cout<<topic<<" ";
@@ -170,10 +185,13 @@ int main(int argc, char *argv[]) {
 	int listenfd = socket(AF_INET, SOCK_STREAM, 0);
 	DIE(listenfd < 0, "socket");
 	int udpfd = socket(AF_INET, SOCK_DGRAM, 0);
+	DIE(udpfd < 0, "socket");
 	struct sockaddr_in serv_addr;
 	socklen_t socket_len = sizeof(struct sockaddr_in);
-	int enable = 1;
-	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0)
+	int flag = 1;
+	if (setsockopt(listenfd, IPPROTO_TCP, 1, (char *)&flag, sizeof(int)) < 0)
+		perror("setsockopt(SO_REUSEADDR) failed");
+	if (setsockopt(udpfd, IPPROTO_TCP, 1, (char *)&flag, sizeof(int)) < 0)
 		perror("setsockopt(SO_REUSEADDR) failed");
 	memset(&serv_addr, 0, socket_len);
 	serv_addr.sin_family = AF_INET;
@@ -181,7 +199,7 @@ int main(int argc, char *argv[]) {
 	rc = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr.s_addr);
 	DIE(rc <= 0, "inet_pton");
 	rc = bind(listenfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr));
-	rc= bind(udpfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	rc = bind(udpfd, (const struct sockaddr *)&serv_addr, sizeof(serv_addr));
 	DIE(rc < 0, "bind");
 	run_chat_multi_server(listenfd, udpfd);
 	return 0;
