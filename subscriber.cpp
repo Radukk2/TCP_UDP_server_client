@@ -49,11 +49,13 @@ void run_client(int sockfd) {
 					scanf("%s", topic);
 					printf("Subscribed to topic %s\n", topic);
 					strcat(sent_packet.message, topic);
+					sent_packet.len += strlen(topic);
 				}
 				if (strncmp(buf, "unsubscribe", 11) == 0) {
 					char topic[100];
 					printf("Unsubscribed from topic %s\n", topic);
 					strcat(sent_packet.message, topic);
+					sent_packet.len += strlen(topic);
 				}
 				send_all(sockfd, &sent_packet, sizeof(sent_packet));
 		}
@@ -72,7 +74,7 @@ int main(int argc, char *argv[]) {
 	DIE(sockfd < 0, "socket");
 	struct sockaddr_in serv_addr;
 	socklen_t socket_len = sizeof(struct sockaddr_in);
-
+	setvbuf(stdout, NULL, 2, BUFSIZ);
 	memset(&serv_addr, 0, socket_len);
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_port = htons(port);

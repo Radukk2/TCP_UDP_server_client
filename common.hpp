@@ -23,6 +23,7 @@ struct client
     struct sockaddr_in addr;
     int fd;
     set<string> topics;
+    bool isOn;
 };
 
 

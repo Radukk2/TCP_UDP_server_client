@@ -82,20 +82,26 @@ void run_chat_multi_server(int listenfd, int udpfd) {
 					bool exists = false;
 					for (int j = 0 ; j < clients.size(); j++) {
 						if (strcmp(clients[j].client_id, id) == 0) {
-							printf("Client %s already connected.\n", id);
+							if (clients[j].isOn) {
+								printf("Client %s already connected.\n", id);
+								close(newsockfd);
+							} else {
+								clients[j].isOn = true;
+								printf("New client %s connected from 127.0.0.1:%d.\n",
+									id, ntohs(cli_addr.sin_port));
+							}
 							exists = true;
 							break;
 						}
 					}
-					if (exists) {
-						close(newsockfd);
+					if (exists)
 						continue;
-					}
 					poll_fds[num_clients].fd = newsockfd;
 					poll_fds[num_clients].events = POLLIN;
 					num_clients++;
 					new_client.addr = cli_addr;
 					new_client.fd = newsockfd;
+					new_client.isOn = true;
 					strcpy(new_client.client_id, id);
 					printf("New client %s connected from 127.0.0.1:%d.\n",
 							new_client.client_id, ntohs(cli_addr.sin_port));
@@ -143,7 +149,7 @@ void run_chat_multi_server(int listenfd, int udpfd) {
 									poll_fds[j] = poll_fds[j + 1];
 								}
 								num_clients--;
-								clients.erase(clients.begin() + j);
+								clients[j].isOn = false;
 								break;
 							}
 						}
