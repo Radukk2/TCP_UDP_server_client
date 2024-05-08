@@ -222,6 +222,9 @@ int main(int argc, char *argv[]) {
 	DIE(rc != 1, "Given port is invalid");
 	int listenfd = socket(AF_INET, SOCK_STREAM, 0);
 	DIE(listenfd < 0, "socket");
+	int enable = 1;
+	rc = setsockopt(listenfd, IPPROTO_TCP, enable, (char *)&enable, sizeof(int));
+        DIE(rc == -1, "Failed to set socket options");
 	int udpfd = socket(AF_INET, SOCK_DGRAM, 0);
 	DIE(udpfd < 0, "socket");
 	struct sockaddr_in serv_addr;
