@@ -128,8 +128,6 @@ int main(int argc, char *argv[]) {
 	rc = connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
 	rc = send(sockfd, argv[1], sizeof(argv[1]), 0);
 	DIE(rc < 0, "connect");
-	int flag = 1;
-	int result = setsockopt(sockfd, IPPROTO_TCP, 1, (char *)&flag, sizeof(int));
 	run_client(sockfd);
 	return 0;
 }

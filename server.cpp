@@ -123,10 +123,48 @@ void run_chat_multi_server(int listenfd, int udpfd) {
 					for (int j = 0; j < num_clients; j++) {
 						if (j > 2 )
 							for (int it = 0; it < clients.size(); it++) {
-								if (clients[it].fd == poll_fds[j].fd) {
-									auto top = clients[it].topics.find(packet.topic);
-									if (top != clients[it].topics.end())
-										send_all(poll_fds[j].fd, &packet, sizeof(packet));
+								 if (clients[it].fd == poll_fds[j].fd && clients[it].isOn) {
+									// auto top = clients[it].topics.find(packet.topic);
+									// if (top != clients[it].topics.end())
+									// 	send_all(poll_fds[j].fd, &packet, sizeof(packet));
+									for (auto iter = clients[it].topics.begin(); iter != clients[it].topics.end(); ++iter) {
+										const char* topic = (const char *)packet.topic;
+										if (string((const char *)packet.topic) == *iter) {
+											send_all(poll_fds[j].fd, &packet, sizeof(packet));
+											continue;
+										}
+										if (iter->find('*') != string::npos && iter->find('+') != string::npos) {
+											string topic  = string((const char *)packet.topic);
+											string regexPrep = *iter;
+											regexPrep = regex_replace(regexPrep, regex("\\*"), ".*");
+											regexPrep = regex_replace(regexPrep, regex("\\+"), "[^/]+");
+											if (regex_match(topic, regex(regexPrep))) {
+												send_all(poll_fds[j].fd, &packet, sizeof(packet));
+												break;
+											}
+											continue;
+										}
+										if (iter->find('*') != string::npos) {
+											string topic  = string((const char *)packet.topic);
+											string regexPrep = *iter;
+											regexPrep = regex_replace(regexPrep, regex("\\*"), ".*");
+											if (regex_match(topic, regex(regexPrep))) {
+												send_all(poll_fds[j].fd, &packet, sizeof(packet));
+												break;
+											}
+
+										}
+										if (iter->find('+') != string::npos) {
+											string topic  = string((const char *)packet.topic);
+											string regexPrep = *iter;
+											regexPrep = regex_replace(regexPrep, regex("\\+"), "[^/]+");
+											if (regex_match(topic, regex(regexPrep))) {
+												send_all(poll_fds[j].fd, &packet, sizeof(packet));
+												break;
+											}
+										}
+									}
+									
 								}
 							}
 					}
@@ -188,11 +226,6 @@ int main(int argc, char *argv[]) {
 	DIE(udpfd < 0, "socket");
 	struct sockaddr_in serv_addr;
 	socklen_t socket_len = sizeof(struct sockaddr_in);
-	int flag = 1;
-	if (setsockopt(listenfd, IPPROTO_TCP, 1, (char *)&flag, sizeof(int)) < 0)
-		perror("setsockopt(SO_REUSEADDR) failed");
-	if (setsockopt(udpfd, IPPROTO_TCP, 1, (char *)&flag, sizeof(int)) < 0)
-		perror("setsockopt(SO_REUSEADDR) failed");
 	memset(&serv_addr, 0, socket_len);
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_port = htons(port);
